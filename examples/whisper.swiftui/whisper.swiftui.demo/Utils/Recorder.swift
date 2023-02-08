@@ -17,7 +17,7 @@ actor Recorder {
         ]
 #if !os(macOS)
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default)
+        try session.setCategory(.playAndRecord, mode: .voiceChat)
 #endif
         let recorder = try AVAudioRecorder(url: url, settings: recordSettings)
         recorder.delegate = delegate
@@ -30,6 +30,18 @@ actor Recorder {
     
     func stopRecording() {
         recorder?.stop()
+        while recorder!.isRecording {
+            
+        }
         recorder = nil
+#if !os(macOS)
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.soloAmbient, mode: .voicePrompt) // , mode: .default)
+            try session.setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            print(error)
+        }
+#endif
     }
 }

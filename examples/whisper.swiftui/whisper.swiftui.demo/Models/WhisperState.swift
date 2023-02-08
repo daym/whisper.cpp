@@ -8,14 +8,19 @@ class WhisperState: NSObject, ObservableObject, AVAudioRecorderDelegate {
     @Published var messageLog = ""
     @Published var canTranscribe = false
     @Published var isRecording = false
+    @Published var langCode = "de"
     
     private var whisperContext: WhisperContext?
     private let recorder = Recorder()
     private var recordedFile: URL? = nil
     private var audioPlayer: AVAudioPlayer?
+    private var voice: AVSpeechSynthesisVoice?
+    
+    var synth = AVSpeechSynthesizer()
+    
     
     private var modelUrl: URL? {
-        Bundle.main.url(forResource: "ggml-tiny.en", withExtension: "bin", subdirectory: "models")
+        Bundle.main.url(forResource: "ggml-base", withExtension: "bin", subdirectory: "models")
     }
     
     private var sampleUrl: URL? {
@@ -30,6 +35,7 @@ class WhisperState: NSObject, ObservableObject, AVAudioRecorderDelegate {
         super.init()
         do {
             try loadModel()
+            try loadVoice()
             canTranscribe = true
         } catch {
             print(error.localizedDescription)
@@ -47,13 +53,29 @@ class WhisperState: NSObject, ObservableObject, AVAudioRecorderDelegate {
         }
     }
     
-    func transcribeSample() async {
+    private func loadVoice() throws {
+        voice = AVSpeechSynthesisVoice(language: "en-GB-u-sd-gbsct")
+        let voices = AVSpeechSynthesisVoice.speechVoices()
+        for x_voice in voices {
+            if (x_voice.name == "Fiona (Enhanced)") {
+                messageLog += "LANG  " + x_voice.language
+                messageLog += "\n"
+                voice = x_voice
+            }
+        }
+    }
+    
+    func getLanguages() async -> [String]? {
+        return await whisperContext?.getLanguages()
+    }
+    
+/*    func transcribeSample() async {
         if let sampleUrl {
             await transcribeAudio(sampleUrl)
         } else {
             messageLog += "Could not locate sample\n"
         }
-    }
+    }*/
     
     private func transcribeAudio(_ url: URL) async {
         if (!canTranscribe) {
@@ -68,8 +90,28 @@ class WhisperState: NSObject, ObservableObject, AVAudioRecorderDelegate {
             messageLog += "Reading wave samples...\n"
             let data = try readAudioSamples(url)
             messageLog += "Transcribing data...\n"
-            await whisperContext.fullTranscribe(samples: data)
+            //messageLog += langCode
+            let beginning = NSDate().timeIntervalSince1970
+            await whisperContext.fullTranscribe(langCode: langCode, samples: data)
+            let end = NSDate().timeIntervalSince1970
+            let duration = end - beginning
+            messageLog += "Duration: \(duration) s\n"
             let text = await whisperContext.getTranscription()
+            /*do {
+                let audioSession = AVAudioSession.sharedInstance()
+                //try audioSession.setCategory(AVAudioSession.Category.ambient)
+                try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+                print("OK deactivate")
+            } catch {
+                print(error)
+            }*/
+
+            let utterance = AVSpeechUtterance(string: text)
+            utterance.voice = voice!
+            utterance.rate = 0.3
+            //utterance.volume = 1.0
+            synth.speak(utterance)
+
             messageLog += "Done: \(text)\n"
         } catch {
             print(error.localizedDescription)

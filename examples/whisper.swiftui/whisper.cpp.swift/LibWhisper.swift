@@ -16,19 +16,19 @@ actor WhisperContext {
         whisper_free(context)
     }
     
-    func fullTranscribe(samples: [Float]) {
+    func fullTranscribe(langCode: String, samples: [Float]) {
         // Leave 2 processors free (i.e. the high-efficiency cores).
         let maxThreads = max(1, min(8, cpuCount() - 2))
         print("Selecting \(maxThreads) threads")
         var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
-        "en".withCString { en in
+        langCode.withCString { language in
             // Adapted from whisper.objc
             params.print_realtime = true
             params.print_progress = false
             params.print_timestamps = true
             params.print_special = false
-            params.translate = false
-            params.language = en
+            params.translate = true
+            params.language = language
             params.n_threads = Int32(maxThreads)
             params.offset_ms = 0
             params.no_context = true
@@ -54,6 +54,14 @@ actor WhisperContext {
         return transcription
     }
     
+    func getLanguages() -> [String] {
+        var result: [String] = []
+        for i in 0...whisper_lang_max_id() {
+            let lang = String(cString: whisper_lang_str(i))
+            result.append(lang)
+        }
+        return result
+    }
     static func createContext(path: String) throws -> WhisperContext {
         let context = whisper_init_from_file(path)
         if let context {
